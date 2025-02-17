@@ -1,80 +1,86 @@
 from typing import List
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.docstore.document import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
 import os
 
 class EmbeddingProcessor:
-    """Processes text chunks into document embeddings using OpenAI's embedding model.
+    """Processes documents into embeddings using OpenAI's embedding model.
     
-    This class handles the creation of embeddings for text chunks using OpenAI's
-    embedding model through LangChain's interface. It manages document creation
-    and embedding generation for use in vector similarity searches.
+    This class handles document loading, text splitting, and embedding generation
+    using OpenAI's embedding model through LangChain's interface. It supports
+    PDF and DOCX files, with appropriate chunking and overlap for context preservation.
     """
 
     def __init__(self):
-        """Initialize the embedding processor with OpenAI credentials."""
+        """Initialize the embedding processor with OpenAI credentials and text splitter."""
         self.embeddings = OpenAIEmbeddings(
             openai_api_key=os.getenv("OPENAI_API_KEY")
         )
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=50,  # 10% overlap
+            length_function=len,
+            is_separator_regex=False,
+        )
 
-    def create_documents(self, chunks: List[str], metadata: dict) -> List[Document]:
-        """Convert text chunks to Document objects with metadata.
+    def load_document(self, file_path: str) -> List[Document]:
+        """Load document from file path using appropriate loader.
         
         Args:
-            chunks: List of text strings to be converted into documents
-            metadata: Dictionary of metadata to be attached to each document
+            file_path: Path to the document file (PDF or DOCX)
             
         Returns:
-            List of Document objects with metadata attached
+            List of Document objects from the file
             
         Raises:
-            ValueError: If chunks list is empty
+            ValueError: If file type is not supported
         """
-        if not chunks:
-            raise ValueError("Chunks list cannot be empty")
-
-        documents = []
-        for i, chunk in enumerate(chunks):
-            doc = Document(
-                page_content=chunk,
-                metadata={
-                    **metadata,
-                    'chunk_index': i
-                }
-            )
-            documents.append(doc)
+        if file_path.endswith('.pdf'):
+            loader = PyPDFLoader(file_path)
+        elif file_path.endswith('.docx'):
+            loader = UnstructuredWordDocumentLoader(file_path)
+        else:
+            raise ValueError("Unsupported file type. Only PDF and DOCX are supported.")
         
-        return documents
+        return loader.load()
 
-    async def process_chunks(self, chunks: List[str], metadata: dict) -> List[Document]:
-        """Process text chunks into embeddings asynchronously.
+    # ... existing code for create_documents method ...
+
+    async def process_document(self, file_path: str, metadata: dict) -> List[Document]:
+        """Process a document file into embeddings asynchronously.
         
         Args:
-            chunks: List of text strings to be processed
+            file_path: Path to the document file
             metadata: Dictionary of metadata to be attached to each document
             
         Returns:
             List of Document objects with embeddings
             
         Raises:
-            Exception: If there's an error during embedding creation
-            ValueError: If chunks list is empty
+            Exception: If there's an error during processing
         """
         try:
-            if not chunks:
-                raise ValueError("Chunks list cannot be empty")
-                
-            # Create documents and generate embeddings
-            documents = self.create_documents(chunks, metadata)
+            # Load the document
+            documents = self.load_document(file_path)
+            
+            # Split the documents into chunks
+            split_docs = self.text_splitter.split_documents(documents)
             
             # Generate embeddings for all documents
-            # Note: This will be done in batches automatically by LangChain
-            embeddings = self.embeddings.embed_documents([doc.page_content for doc in documents])
+            embeddings = self.embeddings.embed_documents([doc.page_content for doc in split_docs])
             
-            # Attach embeddings to documents
-            for doc, embedding in zip(documents, embeddings):
-                doc.metadata['embedding'] = embedding
+            # Attach embeddings and additional metadata to documents
+            for i, (doc, embedding) in enumerate(zip(split_docs, embeddings)):
+                doc.metadata.update({
+                    **metadata,
+                    'embedding': embedding,
+                    'chunk_index': i
+                })
                 
-            return documents
+            return split_docs
         except Exception as e:
-            raise Exception(f"Error creating embeddings: {str(e)}")
+            raise Exception(f"Error processing document: {str(e)}")
+
+    # ... existing code for process_chunks method ...
