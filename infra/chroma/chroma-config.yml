@@ -1,0 +1,3 @@
+ environment:
+  CHROMA_DB_IMPL: duckdb+parquet
+  PERSIST_DIRECTORY: /chroma/chroma

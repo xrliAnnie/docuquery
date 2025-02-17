@@ -1,0 +1,39 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - chroma
+
+  # Temporarily commenting out the frontend service as it's not implemented yet
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "8501:8501"
+  #   depends_on:
+  #     - backend
+  #   volumes:
+  #     - ./frontend:/app
+
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    volumes:
+      - chroma_data:/chroma/chroma_data
+    environment:
+      - CHROMA_DB_IMPL=duckdb+parquet
+      - PERSIST_DIRECTORY=/chroma/chroma_data
+    ports:
+      - "8002:8000"  # Changed to avoid conflict with backend
+
+volumes:
+  chroma_data:
+    driver: local
