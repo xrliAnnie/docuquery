@@ -16,7 +16,9 @@ class EmbeddingProcessor:
     def __init__(self):
         """Initialize the embedding processor with OpenAI credentials and text splitter."""
         self.embeddings = OpenAIEmbeddings(
-            openai_api_key=os.getenv("OPENAI_API_KEY")
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            model="text-embedding-ada-002",  # Make the model explicit
+            chunk_size=1000  # Process 1000 texts at a time for efficiency
         )
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
@@ -46,7 +48,34 @@ class EmbeddingProcessor:
         
         return loader.load()
 
-    # ... existing code for create_documents method ...
+    def create_documents(self, chunks: List[str], metadata: dict) -> List[Document]:
+        """Convert text chunks to Document objects with metadata.
+        
+        Args:
+            chunks: List of text strings to be converted into documents
+            metadata: Dictionary of metadata to be attached to each document
+            
+        Returns:
+            List of Document objects with metadata attached
+            
+        Raises:
+            ValueError: If chunks list is empty
+        """
+        if not chunks:
+            raise ValueError("Chunks list cannot be empty")
+
+        documents = []
+        for i, chunk in enumerate(chunks):
+            doc = Document(
+                page_content=chunk,
+                metadata={
+                    **metadata,
+                    'chunk_index': i
+                }
+            )
+            documents.append(doc)
+        
+        return documents
 
     async def process_document(self, file_path: str, metadata: dict) -> List[Document]:
         """Process a document file into embeddings asynchronously.
@@ -54,6 +83,7 @@ class EmbeddingProcessor:
         Args:
             file_path: Path to the document file
             metadata: Dictionary of metadata to be attached to each document
+                     Should include at minimum: {'doc_name': filename}
             
         Returns:
             List of Document objects with embeddings
@@ -73,14 +103,50 @@ class EmbeddingProcessor:
             
             # Attach embeddings and additional metadata to documents
             for i, (doc, embedding) in enumerate(zip(split_docs, embeddings)):
+                # Get the page number from the document if available
+                page = doc.metadata.get('page', None)
+                
                 doc.metadata.update({
                     **metadata,
                     'embedding': embedding,
-                    'chunk_index': i
+                    'chunk_index': i,
+                    'page': page,
+                    'text_chunk': doc.page_content  # Add the text chunk to metadata for easy access
                 })
                 
             return split_docs
         except Exception as e:
             raise Exception(f"Error processing document: {str(e)}")
 
-    # ... existing code for process_chunks method ...
+    async def process_chunks(self, chunks: List[str], metadata: dict) -> List[Document]:
+        """Process text chunks into embeddings asynchronously.
+        
+        Args:
+            chunks: List of text strings to be processed
+            metadata: Dictionary of metadata to be attached to each document
+            
+        Returns:
+            List of Document objects with embeddings
+            
+        Raises:
+            Exception: If there's an error during embedding creation
+            ValueError: If chunks list is empty
+        """
+        try:
+            if not chunks:
+                raise ValueError("Chunks list cannot be empty")
+                
+            # Create documents and generate embeddings
+            documents = self.create_documents(chunks, metadata)
+            
+            # Generate embeddings for all documents
+            embeddings = self.embeddings.embed_documents([doc.page_content for doc in documents])
+            
+            # Attach embeddings to documents
+            for doc, embedding in zip(documents, embeddings):
+                doc.metadata['embedding'] = embedding
+                doc.metadata['text_chunk'] = doc.page_content
+                
+            return documents
+        except Exception as e:
+            raise Exception(f"Error creating embeddings: {str(e)}")
