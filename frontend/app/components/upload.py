@@ -2,14 +2,12 @@ import streamlit as st
 from services.api import APIClient
 from utils.file import validate_file
 
+
 class FileUploader:
     def __init__(self):
         self.api_client = APIClient()
 
     def __call__(self):
-        # Debug: Add a visible element to confirm the component is running
-        st.write("Upload Component Loaded")  # Add this line temporarily
-        
         # Add clear instructions with visible borders
         st.markdown("""
         ### 📄 Upload your document:
@@ -28,24 +26,32 @@ class FileUploader:
 
         # Handle uploaded file
         if uploaded_file is not None:
-            # Display file info in a nice format
             st.success(f"📄 Uploaded: {uploaded_file.name}")
-            file_size_mb = uploaded_file.size/1024/1024
-            st.text(f"Size: {file_size_mb:.1f}MB")
 
-            # Validate file
             if validate_file(uploaded_file):
-                # Show process button
                 if st.button("📝 Process Document", type="primary"):
                     try:
-                        with st.spinner("Processing your document..."):
-                            # TODO: Replace with actual API call once backend is ready
-                            import time
-                            time.sleep(2)  # Simulate processing time
-                            st.session_state.current_document = "dummy_doc_id"
-                            st.success("✅ Document processed successfully!")
-                            st.balloons()  # Add a fun touch
+                        with st.spinner("Processing document..."):
+                            response = self.api_client.upload_document(uploaded_file)
+
+                            if response.get("status") == "success":
+                                doc_id = response.get("doc_id")
+                                st.session_state.current_document = doc_id
+
+                                # Verify document in Chroma
+                                doc_status = self.api_client.get_document_status(doc_id)
+                                if doc_status.get("status") == "success":
+                                    st.success(f"""
+                                    ✅ Document processed successfully!
+                                    - Chunks created: {doc_status.get('chunk_count')}
+                                    - Ready for questions
+                                    """)
+
+                                    # Force refresh to show chat interface
+                                    st.rerun()
+                                else:
+                                    st.warning("Document processed but not found in database")
+                            else:
+                                st.error(f"❌ Processing failed: {response.get('message', 'Unknown error')}")
                     except Exception as e:
-                        st.error(f"❌ Error processing document: {str(e)}")
-            else:
-                st.error("❌ Please upload a valid PDF, DOCX, or TXT file.")
+                        st.error(f"❌ Error: {str(e)}")

@@ -25,15 +25,16 @@ def main():
     
     with col1:
         # Document upload and preview
-        uploader = FileUploader()  # Create instance
-        uploader()  # Call the instance
+        uploader = FileUploader()
+        uploader()
         
         if st.session_state.current_document:
             DocumentViewer()
     
     with col2:
-        # Chat interface
-        ChatInterface()
+        if st.session_state.current_document:
+            st.markdown("### Ask Questions")
+            ChatInterface()
 
 if __name__ == "__main__":
     main()

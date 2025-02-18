@@ -1,17 +1,14 @@
 services:
   backend:
-    build: 
-      context: ../backend
-      dockerfile: ../infra/backend/Dockerfile
+    build:
+      context: ../backend  # Point to the backend directory
+      dockerfile: ../infra/backend/Dockerfile  # Point to the Dockerfile location
     ports:
-      - "8001:8000"
-    env_file:
-      - ../.env
+      - "8001:8000"  # Map container port 8000 to host port 8001
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - CHROMA_HOST=chroma
     volumes:
-      - ../backend:/app
+      - ../backend:/app  # Mount the backend code
     depends_on:
       - chroma
 

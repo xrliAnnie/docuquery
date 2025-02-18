@@ -1,20 +1,29 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict
+import logging
+import traceback  # Add this import
 from app.core.document_loader import DocumentLoader
 from app.core.embedding_processor import EmbeddingProcessor
 from app.core.db_connector import DBConnector
 
-router = APIRouter()
+# Set up logging
+logger = logging.getLogger(__name__)
 
-# Pydantic models
-class Query(BaseModel):
+# Define response models
+class Source(BaseModel):
+    page: int
     text: str
-    filters: Optional[Dict] = None
 
 class Response(BaseModel):
     answer: str
-    sources: List[Dict]
+    sources: List[Source] = []
+
+class Query(BaseModel):
+    text: str
+    filters: Optional[Dict[str, str]] = None
+
+router = APIRouter()
 
 @router.post("/ingest")
 async def ingest_document(file: UploadFile = File(...)):
@@ -22,30 +31,42 @@ async def ingest_document(file: UploadFile = File(...)):
     Endpoint to ingest a document, process it, and store in the vector database.
     """
     try:
-        # Initialize processors
+        logger.info(f"Processing file: {file.filename}")
+        
+        # Initialize document loader
         doc_loader = DocumentLoader()
-        embedding_processor = EmbeddingProcessor()
-        db = DBConnector()
 
-        # Extract text from document
-        text_chunks = await doc_loader.process_file(file)
+        # Process the document
+        try:
+            # Extract text and get chunks
+            result = await doc_loader.process_file(file)
+            
+            return {
+                "status": "success",
+                "message": "Document processed successfully",
+                "doc_id": f"doc_{hash(file.filename)}",
+                "metadata": {
+                    "filename": file.filename,
+                    "chunk_count": len(result["chunks"]),
+                    "content_type": file.content_type
+                }
+            }
 
-        # Create metadata
-        metadata = {
-            "filename": file.filename,
-            "content_type": file.content_type
-        }
-
-        # Process chunks and create embeddings
-        documents = await embedding_processor.process_chunks(text_chunks, metadata)
-
-        # Store in database
-        await db.store_documents(documents)
-
-        return {"message": "Document processed successfully", "chunks": len(text_chunks)}
+        except Exception as e:
+            logger.error(f"Error processing document: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error processing document: {str(e)}"
+            )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error: {str(e)}"
+        )
 
 @router.post("/query", response_model=Response)
 async def query_document(query: Query):
@@ -53,22 +74,38 @@ async def query_document(query: Query):
     Endpoint to query the stored documents and get relevant answers.
     """
     try:
+        logger.info(f"Processing query: {query.text}")
+        
         # Initialize processors
         embedding_processor = EmbeddingProcessor()
         db = DBConnector()
 
-        # Process query and get response
-        query_embedding = await embedding_processor.process_query(query.text)
-        results = await db.query_documents(query_embedding, query.filters)
+        # Process query
+        try:
+            # Create embedding for query
+            query_embedding = await embedding_processor.process_query(query.text)
+            
+            # Search database
+            results = await db.query_documents(query_embedding, query.filters)
 
-        # Format response
-        return {
-            "answer": results.answer,
-            "sources": results.sources
-        }
+            return {
+                "answer": results.answer,
+                "sources": results.sources
+            }
+
+        except Exception as e:
+            logger.error(f"Error processing query: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error processing query: {str(e)}"
+            )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error: {str(e)}"
+        )
 
 @router.get("/health")
 async def health_check():
@@ -76,3 +113,33 @@ async def health_check():
     Health check endpoint.
     """
     return {"status": "healthy"}
+
+@router.get("/documents/{doc_id}")
+async def get_document_status(doc_id: str):
+    """
+    Get document status and metadata from Chroma
+    """
+    try:
+        # Initialize Chroma client
+        client = chromadb.HttpClient(host="chroma", port=8000)
+        collection = client.get_or_create_collection("langchain")
+        
+        # Query the collection
+        results = collection.get(
+            where={"doc_id": doc_id},
+            include=["metadatas", "documents"]
+        )
+        
+        return {
+            "status": "success",
+            "chunk_count": len(results['ids']),
+            "metadata": results['metadatas'],
+            "sample_chunks": results['documents'][:3]  # First 3 chunks as sample
+        }
+    except Exception as e:
+        logger.error(f"Error getting document status: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting document status: {str(e)}"
+        )

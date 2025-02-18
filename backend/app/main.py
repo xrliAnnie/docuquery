@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from app.api.routes import router  # Import the router from routes.py
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from app.core.document_loader import DocumentLoader
@@ -26,6 +27,13 @@ app = FastAPI(
     title="DocuQuery API",
     description="API for document ingestion and question answering",
     version="0.1.0"
+)
+
+# Mount the router with prefix
+app.include_router(
+    router,
+    prefix="/api/v1",
+    tags=["v1"]
 )
 
 class Query(BaseModel):
@@ -131,6 +139,11 @@ async def query_document(query: Query) -> QueryResponse:
     except Exception as e:
         logger.error(f"Query error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
     import uvicorn
