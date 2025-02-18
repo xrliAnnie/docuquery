@@ -1,9 +1,9 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict
-from document_loader import DocumentLoader
-from embedding_processor import EmbeddingProcessor
-from db_connector import DBConnector
+from app.core.document_loader import DocumentLoader
+from app.core.embedding_processor import EmbeddingProcessor
+from app.core.db_connector import DBConnector
 import logging
 import os
 from dotenv import load_dotenv

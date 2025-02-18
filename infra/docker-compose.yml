@@ -1,0 +1,45 @@
+services:
+  backend:
+    build: 
+      context: ../backend
+      dockerfile: ../infra/backend/Dockerfile
+    ports:
+      - "8001:8000"
+    env_file:
+      - ../.env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CHROMA_HOST=chroma
+    volumes:
+      - ../backend:/app
+    depends_on:
+      - chroma
+
+  # frontend:
+  #   build: 
+  #     context: ../frontend
+  #     dockerfile: ../infra/frontend/Dockerfile
+  #   ports:
+  #     - "8501:8501"
+  #   environment:
+  #     - API_URL=http://backend:8000
+  #   volumes:
+  #     - ../frontend:/app
+  #   depends_on:
+  #     - backend
+
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    volumes:
+      - chroma_data:/chroma/chroma_data  # Changed from index_data to chroma_data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma_data
+      - ALLOW_RESET=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    ports:
+      - "8000:8000"
+
+volumes:
+  chroma_data:
+    driver: local
