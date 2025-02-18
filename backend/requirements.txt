@@ -1,11 +1,14 @@
-fastapi==0.85.1
+fastapi>=0.95.2
 uvicorn==0.18.3
 python-multipart==0.0.5
-langchain==0.0.267
-chromadb==0.3.29
+langchain>=0.0.350
+langchain-community>=0.0.10
+langchain-openai>=0.0.5  # Add this
+langchain-chroma>=0.0.5  # Add this
+chromadb>=0.4.16
 pydantic>=1.9.0,<2.0.0
 PyPDF2==3.0.1
 python-docx==0.8.11
 openai==0.27.8
 numpy==1.24.3
-tokenizers==0.15.0
+tokenizers==0.15.0 

@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict
 import logging
 import traceback  # Add this import
+import chromadb  # Add this import
 from app.core.document_loader import DocumentLoader
 from app.core.embedding_processor import EmbeddingProcessor
 from app.core.db_connector import DBConnector
@@ -121,20 +122,30 @@ async def get_document_status(doc_id: str):
     """
     try:
         # Initialize Chroma client
-        client = chromadb.HttpClient(host="chroma", port=8000)
+        client = Client(Settings(
+            chroma_api_impl="rest",
+            chroma_server_host="chroma",
+            chroma_server_http_port=8000
+        ))
+        
         collection = client.get_or_create_collection("langchain")
         
         # Query the collection
         results = collection.get(
-            where={"doc_id": doc_id},
-            include=["metadatas", "documents"]
+            where={"doc_id": doc_id}
         )
         
+        if not results['ids']:
+            return {
+                "status": "error",
+                "message": f"Document {doc_id} not found"
+            }
+            
         return {
             "status": "success",
             "chunk_count": len(results['ids']),
             "metadata": results['metadatas'],
-            "sample_chunks": results['documents'][:3]  # First 3 chunks as sample
+            "sample_chunks": results['documents'][:3] if results['documents'] else []
         }
     except Exception as e:
         logger.error(f"Error getting document status: {str(e)}")

@@ -4,6 +4,9 @@ from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class EmbeddingProcessor:
     """Processes documents into embeddings using OpenAI's embedding model.
