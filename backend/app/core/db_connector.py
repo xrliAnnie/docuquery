@@ -10,14 +10,14 @@ logger = logging.getLogger(__name__)
 
 class DBConnector:
     def __init__(self):
-        """Initialize the database connector with OpenAI embeddings"""
+        """Initialize the database connector with OpenAI embeddings and a fixed collection name."""
         try:
             # Initialize OpenAI embeddings
             self.embeddings = OpenAIEmbeddings(
                 openai_api_key=os.getenv("OPENAI_API_KEY")
             )
             
-            # Initialize client with correct tenant and API path
+            # Initialize chroma client
             client = chromadb.HttpClient(
                 host="chroma",
                 port=8000,
@@ -30,13 +30,14 @@ class DBConnector:
                 )
             )
 
-            # Initialize Chroma with the client
+            # Use the Chroma wrapper from langchain_community.vectorstores.
+            # This returns an object that has the "add_texts" method.
             self.db = Chroma(
                 client=client,
-                collection_name="documents",
-                embedding_function=self.embeddings,
+                collection_name="langchain",
+                embedding_function=self.embeddings
             )
-            logger.info("Successfully initialized ChromaDB connection")
+            logger.info("Successfully initialized ChromaDB connection with collection: langchain")
         except Exception as e:
             logger.error(f"Error initializing DB connector: {str(e)}")
             raise
@@ -44,7 +45,11 @@ class DBConnector:
     async def store_documents(self, documents: List[Document]) -> bool:
         """Store documents in Chroma DB"""
         try:
-            self.db.add_documents(documents)
+            self.db.add_texts(
+                texts=[doc.page_content for doc in documents],
+                metadatas=[doc.metadata for doc in documents],
+                ids=[doc.metadata.get("id", f"doc_{i}") for i, doc in enumerate(documents)]
+            )
             logger.info(f"Successfully stored {len(documents)} documents")
             return True
         except Exception as e:
@@ -68,16 +73,14 @@ class DBConnector:
     async def get_collection(self, collection_id: str = None):
         """Get all documents in the collection"""
         try:
-            # If no collection_id is provided, return all documents
             if collection_id is None:
                 collection = self.db._collection
                 results = collection.get()
             else:
-                # Get specific documents by ID
                 collection = self.db._collection
                 results = collection.get(ids=[collection_id])
             
-            logger.info(f"Successfully retrieved collection")
+            logger.info("Successfully retrieved collection")
             return results
         except Exception as e:
             logger.error(f"Error retrieving collection: {str(e)}")

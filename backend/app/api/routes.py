@@ -7,6 +7,7 @@ import chromadb  # Add this import
 from app.core.document_loader import DocumentLoader
 from app.core.embedding_processor import EmbeddingProcessor
 from app.core.db_connector import DBConnector
+from chromadb import Client, Settings
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -29,44 +30,51 @@ router = APIRouter()
 @router.post("/ingest")
 async def ingest_document(file: UploadFile = File(...)):
     """
-    Endpoint to ingest a document, process it, and store in the vector database.
+    Endpoint to ingest a document, process it, store it in the vector database, and return the doc identifier.
     """
     try:
         logger.info(f"Processing file: {file.filename}")
         
-        # Initialize document loader
+        # Initialize Document Loader and process file
         doc_loader = DocumentLoader()
-
-        # Process the document
-        try:
-            # Extract text and get chunks
-            result = await doc_loader.process_file(file)
-            
-            return {
-                "status": "success",
-                "message": "Document processed successfully",
-                "doc_id": f"doc_{hash(file.filename)}",
-                "metadata": {
-                    "filename": file.filename,
-                    "chunk_count": len(result["chunks"]),
-                    "content_type": file.content_type
-                }
+        result = await doc_loader.process_file(file)
+        
+        # Generate a document id from the file name (or use another unique identifier)
+        doc_id = f"doc_{hash(file.filename)}"
+        
+        # Store document chunks in the Chroma vector store via DBConnector:
+        db = DBConnector()
+        # We add a "doc_id" field to the metadata of each chunk.
+        metadata = [{"doc_id": doc_id, "chunk_index": i} for i in range(len(result["chunks"]))]
+        
+        db.db.add_texts(
+            texts=result["chunks"],
+            metadatas=metadata,
+            ids=[f"{doc_id}_{i}" for i in range(len(result["chunks"]))]
+        )
+        
+        return {
+            "status": "success",
+            "message": "Document processed and stored successfully",
+            "doc_id": doc_id,
+            "metadata": {
+                "filename": file.filename,
+                "chunk_count": len(result["chunks"]),
+                "content_type": file.content_type
             }
-
-        except Exception as e:
-            logger.error(f"Error processing document: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error processing document: {str(e)}"
-            )
-
+        }
+    except openai.RateLimitError as e:
+        logger.error(f"OpenAI quota exceeded: {str(e)}")
+        raise HTTPException(
+            status_code=429,
+            detail="OpenAI quota exceeded, please check your plan and billing details."
+        )
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(f"Error processing document: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
-            detail=f"Unexpected error: {str(e)}"
+            detail=f"Error processing document: {str(e)}"
         )
 
 @router.post("/query", response_model=Response)
@@ -115,42 +123,40 @@ async def health_check():
     """
     return {"status": "healthy"}
 
+# backend/app/api/routes.py
 @router.get("/documents/{doc_id}")
 async def get_document_status(doc_id: str):
     """
-    Get document status and metadata from Chroma
+    Get document status and metadata from Chroma using the DBConnector.
     """
     try:
-        # Initialize Chroma client
-        client = Client(Settings(
-            chroma_api_impl="rest",
-            chroma_server_host="chroma",
-            chroma_server_http_port=8000
-        ))
-        
-        collection = client.get_or_create_collection("langchain")
-        
-        # Query the collection
-        results = collection.get(
-            where={"doc_id": doc_id}
-        )
-        
-        if not results['ids']:
-            return {
-                "status": "error",
-                "message": f"Document {doc_id} not found"
-            }
-            
+        logger.info(f"Fetching document with doc_id: {doc_id} using DBConnector.")
+
+        # Use the DBConnector to ensure you're hitting the same persistent collection.
+        db = DBConnector()
+
+        # For debugging, get the underlying collection to log its full content.
+        collection = db.db._collection  # Access the raw collection for logging purposes.
+        all_items = collection.get()
+        logger.debug(f"Complete collection data: {all_items}")
+
+        # Query the collection using the metadata 'doc_id'
+        results = collection.get(where={"doc_id": doc_id})
+        logger.debug(f"Query results for doc_id {doc_id}: {results}")
+
+        if not results.get("ids"):
+            logger.error(
+                f"Document {doc_id} not found. Metadata in collection: {all_items.get('metadatas')}"
+            )
+            return {"status": "error", "message": f"Document {doc_id} not found"}
+
+        logger.info(f"Document {doc_id} found with {len(results['ids'])} chunks.")
         return {
             "status": "success",
-            "chunk_count": len(results['ids']),
-            "metadata": results['metadatas'],
-            "sample_chunks": results['documents'][:3] if results['documents'] else []
+            "chunk_count": len(results["ids"]),
+            "metadata": results.get("metadatas"),
+            "sample_chunks": results["documents"][:3] if results.get("documents") else []
         }
     except Exception as e:
-        logger.error(f"Error getting document status: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error getting document status: {str(e)}"
-        )
+        logger.error(f"Error getting document status: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error getting document status: {str(e)}")

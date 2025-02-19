@@ -45,28 +45,28 @@ class DocumentLoader:
         logger.info(f"Starting document processing for {file.filename}")
 
         try:
-            # Validate file
-            await self.validate_file(file)
+            # Validate file and get the determined content type
+            determined_content_type = await self.validate_file(file)
 
             # Read file content
             content = await file.read()
 
-            # Process based on file type
-            if file.content_type == 'application/pdf':
+            # Process based on determined content type
+            if determined_content_type == 'application/pdf':
                 chunks = await self.load_pdf(io.BytesIO(content))
-            elif file.content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+            elif determined_content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
                 chunks = await self.load_docx(io.BytesIO(content))
-            elif file.content_type == 'text/plain':
+            elif determined_content_type == 'text/plain':
                 chunks = await self.load_txt(io.BytesIO(content))
             else:
-                raise ValueError(f"Unsupported content type: {file.content_type}")
+                raise ValueError(f"Unsupported content type: {determined_content_type}")
 
             result = {
                 "chunks": chunks,
                 "metadata": {
                     "source": file.filename,
                     "chunk_count": len(chunks),
-                    "file_type": file.content_type,
+                    "file_type": determined_content_type,
                 }
             }
 
@@ -77,33 +77,37 @@ class DocumentLoader:
             logger.error(f"Error processing document {file.filename}: {str(e)}")
             raise
 
-    async def validate_file(self, file: UploadFile) -> None:
+    async def validate_file(self, file: UploadFile) -> str:
         """
         Validate file type by extension and MIME type.
+        Returns the determined content type.
         """
         ext = self._get_file_extension(file.filename)
         if ext not in self.SUPPORTED_EXTENSIONS:
             raise ValueError(
                 f"Unsupported file extension: {ext}. Supported types: {', '.join(self.SUPPORTED_EXTENSIONS)}")
 
-        # If content_type is empty, try to guess it from extension
+        # Determine the content type in a local variable
         if not file.content_type:
             if ext == '.txt':
-                file.content_type = 'text/plain'
+                determined_content_type = 'text/plain'
             elif ext == '.pdf':
-                file.content_type = 'application/pdf'
+                determined_content_type = 'application/pdf'
             elif ext == '.docx':
-                file.content_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                determined_content_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             else:
                 raise ValueError(f"Could not determine content type for file: {file.filename}")
+        else:
+            determined_content_type = file.content_type
 
-        if file.content_type not in self.SUPPORTED_MIMETYPES:
-            raise ValueError(f"Invalid content type: {file.content_type}")
+        if determined_content_type not in self.SUPPORTED_MIMETYPES:
+            raise ValueError(f"Invalid content type: {determined_content_type}")
 
-        if self.SUPPORTED_MIMETYPES[file.content_type] != ext:
-            raise ValueError(f"File extension {ext} does not match content type {file.content_type}")
+        if self.SUPPORTED_MIMETYPES[determined_content_type] != ext:
+            raise ValueError(f"File extension {ext} does not match content type {determined_content_type}")
 
         logger.debug(f"File validation successful for {file.filename}")
+        return determined_content_type
 
     def _get_file_extension(self, filename: str) -> str:
         """Extract and validate file extension."""
