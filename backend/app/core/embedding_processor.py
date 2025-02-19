@@ -5,6 +5,8 @@ from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDo
 from langchain_community.embeddings import OpenAIEmbeddings
 import os
 import logging
+import asyncio
+import functools
 
 logger = logging.getLogger(__name__)
 
@@ -104,3 +106,15 @@ class EmbeddingProcessor:
         except Exception as e:
             logger.error(f"Error creating embeddings: {str(e)}")
             raise
+
+    async def process_query(self, text: str) -> list:
+        """
+        Asynchronously process a query string into an embedding.
+        """
+        loop = asyncio.get_running_loop()
+        # Use run_in_executor to run the synchronous embed_query call without blocking the event loop
+        query_embedding = await loop.run_in_executor(
+            None,
+            functools.partial(self.embeddings.embed_query, text)
+        )
+        return query_embedding

@@ -34,7 +34,8 @@ def main():
     with col2:
         if st.session_state.current_document:
             st.markdown("### Ask Questions")
-            ChatInterface()
+            chat_interface = ChatInterface()
+            chat_interface()  # This actually calls the __call__ method.
 
 if __name__ == "__main__":
     main()
