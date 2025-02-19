@@ -26,9 +26,11 @@ services:
   #     - backend
 
   chroma:
-    image: ghcr.io/chroma-core/chroma:latest
+    build:
+      context: .
+      dockerfile: chroma/Dockerfile
     volumes:
-      - chroma_data:/chroma/chroma_data  # Changed from index_data to chroma_data
+      - chroma_data:/chroma/chroma_data
     environment:
       - IS_PERSISTENT=TRUE
       - PERSIST_DIRECTORY=/chroma/chroma_data
@@ -36,6 +38,11 @@ services:
       - ANONYMIZED_TELEMETRY=FALSE
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   chroma_data:

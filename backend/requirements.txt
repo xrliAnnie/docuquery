@@ -1,14 +1,17 @@
-fastapi>=0.95.2
+# Core dependencies
+fastapi==0.99.1
 uvicorn==0.18.3
 python-multipart==0.0.5
-langchain>=0.0.350
-langchain-community>=0.0.10
-langchain-openai>=0.0.5  # Add this
-langchain-chroma>=0.0.5  # Add this
-chromadb>=0.4.16
-pydantic>=1.9.0,<2.0.0
+
+# LangChain ecosystem
+langchain==0.1.9
+langchain-community==0.0.24
+langchain-openai==0.0.8  # Updated OpenAI package
+chromadb==0.4.9  # Use a specific version known to work
+
+# Document processing
 PyPDF2==3.0.1
 python-docx==0.8.11
-openai==0.27.8
-numpy==1.24.3
-tokenizers==0.15.0 
+
+# OpenAI
+openai>=1.10.0

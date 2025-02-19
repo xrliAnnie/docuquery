@@ -1,6 +1,8 @@
-FROM chromadb/chroma:0.4.22
+FROM ghcr.io/chroma-core/chroma:0.4.18
 
-# Force reinstall the specific versions, ensuring they override any upgrades
-RUN pip install --no-cache-dir --force-reinstall numpy==1.24.3 chroma-hnswlib==0.7.3
+# Downgrade NumPy to a compatible version
+RUN pip uninstall -y numpy && \
+    pip install numpy==1.24.3
 
-CMD ["python", "-m", "chromadb.serve"]
+# Keep the original CMD
+CMD ["uvicorn", "chromadb.app:app", "--reload", "--workers", "1", "--host", "0.0.0.0", "--port", "8000"]

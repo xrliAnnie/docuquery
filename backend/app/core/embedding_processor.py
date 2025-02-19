@@ -1,47 +1,31 @@
 from typing import List
-from langchain.embeddings import OpenAIEmbeddings
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
+from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
+from langchain_community.embeddings import OpenAIEmbeddings
 import os
 import logging
 
 logger = logging.getLogger(__name__)
 
 class EmbeddingProcessor:
-    """Processes documents into embeddings using OpenAI's embedding model.
+    """Processes documents into embeddings using OpenAI's embedding model."""
     
-    This class handles document loading, text splitting, and embedding generation
-    using OpenAI's embedding model through LangChain's interface. It supports
-    PDF and DOCX files, with appropriate chunking and overlap for context preservation.
-    """
-
     def __init__(self):
         """Initialize the embedding processor with OpenAI credentials and text splitter."""
         self.embeddings = OpenAIEmbeddings(
             openai_api_key=os.getenv("OPENAI_API_KEY"),
-            model="text-embedding-ada-002",  # Make the model explicit
-            chunk_size=1000  # Process 1000 texts at a time for efficiency
+            model="text-embedding-ada-002"
         )
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
-            chunk_overlap=50,  # 10% overlap
+            chunk_overlap=50,
             length_function=len,
             is_separator_regex=False,
         )
 
     def load_document(self, file_path: str) -> List[Document]:
-        """Load document from file path using appropriate loader.
-        
-        Args:
-            file_path: Path to the document file (PDF or DOCX)
-            
-        Returns:
-            List of Document objects from the file
-            
-        Raises:
-            ValueError: If file type is not supported
-        """
+        """Load document from file path using appropriate loader."""
         if file_path.endswith('.pdf'):
             loader = PyPDFLoader(file_path)
         elif file_path.endswith('.docx'):
@@ -52,18 +36,7 @@ class EmbeddingProcessor:
         return loader.load()
 
     def create_documents(self, chunks: List[str], metadata: dict) -> List[Document]:
-        """Convert text chunks to Document objects with metadata.
-        
-        Args:
-            chunks: List of text strings to be converted into documents
-            metadata: Dictionary of metadata to be attached to each document
-            
-        Returns:
-            List of Document objects with metadata attached
-            
-        Raises:
-            ValueError: If chunks list is empty
-        """
+        """Convert text chunks to Document objects with metadata."""
         if not chunks:
             raise ValueError("Chunks list cannot be empty")
 
@@ -81,19 +54,7 @@ class EmbeddingProcessor:
         return documents
 
     async def process_document(self, file_path: str, metadata: dict) -> List[Document]:
-        """Process a document file into embeddings asynchronously.
-        
-        Args:
-            file_path: Path to the document file
-            metadata: Dictionary of metadata to be attached to each document
-                     Should include at minimum: {'doc_name': filename}
-            
-        Returns:
-            List of Document objects with embeddings
-            
-        Raises:
-            Exception: If there's an error during processing
-        """
+        """Process a document file into embeddings asynchronously."""
         try:
             # Load the document
             documents = self.load_document(file_path)
@@ -102,7 +63,7 @@ class EmbeddingProcessor:
             split_docs = self.text_splitter.split_documents(documents)
             
             # Generate embeddings for all documents
-            embeddings = self.embeddings.embed_documents([doc.page_content for doc in split_docs])
+            embeddings = await self.embeddings.aembed_documents([doc.page_content for doc in split_docs])
             
             # Attach embeddings and additional metadata to documents
             for i, (doc, embedding) in enumerate(zip(split_docs, embeddings)):
@@ -114,27 +75,16 @@ class EmbeddingProcessor:
                     'embedding': embedding,
                     'chunk_index': i,
                     'page': page,
-                    'text_chunk': doc.page_content  # Add the text chunk to metadata for easy access
+                    'text_chunk': doc.page_content
                 })
                 
             return split_docs
         except Exception as e:
-            raise Exception(f"Error processing document: {str(e)}")
+            logger.error(f"Error processing document: {str(e)}")
+            raise
 
     async def process_chunks(self, chunks: List[str], metadata: dict) -> List[Document]:
-        """Process text chunks into embeddings asynchronously.
-        
-        Args:
-            chunks: List of text strings to be processed
-            metadata: Dictionary of metadata to be attached to each document
-            
-        Returns:
-            List of Document objects with embeddings
-            
-        Raises:
-            Exception: If there's an error during embedding creation
-            ValueError: If chunks list is empty
-        """
+        """Process text chunks into embeddings asynchronously."""
         try:
             if not chunks:
                 raise ValueError("Chunks list cannot be empty")
@@ -143,7 +93,7 @@ class EmbeddingProcessor:
             documents = self.create_documents(chunks, metadata)
             
             # Generate embeddings for all documents
-            embeddings = self.embeddings.embed_documents([doc.page_content for doc in documents])
+            embeddings = await self.embeddings.aembed_documents([doc.page_content for doc in documents])
             
             # Attach embeddings to documents
             for doc, embedding in zip(documents, embeddings):
@@ -152,4 +102,5 @@ class EmbeddingProcessor:
                 
             return documents
         except Exception as e:
-            raise Exception(f"Error creating embeddings: {str(e)}")
+            logger.error(f"Error creating embeddings: {str(e)}")
+            raise
