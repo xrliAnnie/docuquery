@@ -25,6 +25,9 @@ class Query(BaseModel):
     text: str
     filters: Optional[Dict[str, str]] = None
 
+class QueryRequest(BaseModel):
+    text: str
+
 router = APIRouter()
 
 @router.post("/ingest")
@@ -160,3 +163,23 @@ async def get_document_status(doc_id: str):
     except Exception as e:
         logger.error(f"Error getting document status: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error getting document status: {str(e)}")
+
+@router.post("/query")
+async def query(query_data: QueryRequest):
+    logger.info(f"Received query: {query_data.text}")
+    try:
+        # Process query embedding using the embedding processor
+        query_embedding = await embedding_processor.process_query(query_data.text)
+        logger.debug(f"Query embedding: {query_embedding}")
+
+        # Query the database (e.g. using the DBConnector)
+        results = await db_connector.query_documents(query_data.text)
+        logger.debug(f"Query results: {results}")
+
+        # Build a response based on the number of documents found, for example
+        answer = f"Found {len(results)} matching document(s)."
+        logger.info(f"Returning answer: {answer}")
+        return {"answer": answer}
+    except Exception as e:
+        logger.error(f"Error processing query: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")

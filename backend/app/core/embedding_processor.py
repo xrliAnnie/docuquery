@@ -118,3 +118,6 @@ class EmbeddingProcessor:
             functools.partial(self.embeddings.embed_query, text)
         )
         return query_embedding
+
+# Create an instance of EmbeddingProcessor
+embedding_processor = EmbeddingProcessor()

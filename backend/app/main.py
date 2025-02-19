@@ -8,6 +8,8 @@ from app.core.db_connector import DBConnector
 import logging
 import os
 from dotenv import load_dotenv
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 # Configure logging
 logging.basicConfig(
@@ -140,6 +142,13 @@ async def query_document(query: Query) -> QueryResponse:
         logger.error(f"Query error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    logger.error(f"Validation error for request {request.url}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": exc.body},
+    )
 
 @app.get("/health")
 async def health_check():

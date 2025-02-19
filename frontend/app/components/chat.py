@@ -89,7 +89,7 @@ class ChatInterface:
             else:
                 try:
                     logger.debug("Sending POST request to backend query endpoint.")
-                    response = requests.post("http://localhost:8000/query", json={"text": question})
+                    response = requests.post("http://localhost:8001/api/v1/query", json={"text": question})
                     logger.debug(f"Backend response status: {response.status_code}")
                     if response.status_code == 200:
                         data = response.json()
