@@ -24,20 +24,19 @@ class ChatInterface:
         else:
             logger.debug("Found a document in session state; proceeding with chat interface.")
 
+        # Initialize messages list if it doesn't exist
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+
         # Display chat history
-        if "messages" in st.session_state:
-            logger.debug(f"Rendering {len(st.session_state.messages)} chat messages.")
-            for idx, message in enumerate(st.session_state.messages):
-                logger.debug(f"Rendering message {idx}: role={message.get('role')}, content={message.get('content')[:50]}")
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
-                    if "sources" in message:
-                        with st.expander("View Sources"):
-                            for source in message["sources"]:
-                                logger.debug(f"Rendering source: Page {source.get('page')}, text snippet: {source.get('text')[:50]}")
-                                st.markdown(f"📄 Page {source['page']}: {source['text']}")
-        else:
-            logger.debug("No messages found in session state.")
+        logger.debug(f"Rendering {len(st.session_state.messages)} chat messages.")
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                if "sources" in message:
+                    with st.expander("View Sources"):
+                        for source in message["sources"]:
+                            st.markdown(f"📄 Page {source['page']}: {source['text']}")
 
         # Chat input
         logger.debug("Displaying chat input box.")
@@ -58,12 +57,22 @@ class ChatInterface:
                 logger.debug(f"Received response from APIClient: {response}")
 
                 if response.get("status") != "error":
-                    st.session_state.messages.append({
+                    # Add assistant message
+                    assistant_message = {
                         "role": "assistant",
                         "content": response["answer"],
                         "sources": response.get("sources", [])
-                    })
+                    }
+                    st.session_state.messages.append(assistant_message)
                     logger.debug("Assistant message appended to session state.")
+                    
+                    # Display the new message immediately
+                    with st.chat_message("assistant"):
+                        st.markdown(response["answer"])
+                        if response.get("sources"):
+                            with st.expander("View Sources"):
+                                for source in response["sources"]:
+                                    st.markdown(f"📄 Page {source['page']}: {source['text']}")
                 else:
                     st.error(f"❌ Error: {response.get('message')}")
                     logger.error(f"Error processing query: {response.get('message')}")
@@ -105,11 +114,20 @@ class ChatInterface:
                         }
                     )
                     logger.debug(f"Backend response status: {response.status_code}")
+                    logger.debug(f"Full response: {response.text}")
+                    
                     if response.status_code == 200:
                         data = response.json()
                         logger.debug(f"Response JSON: {data}")
-                        answer = data.get("answer", "No answer returned")
-                        st.write("**Answer:**", answer)
+                        if "answer" in data:
+                            st.write("**Answer:**", data["answer"])
+                            if data.get("sources"):
+                                st.write("**Sources:**")
+                                for source in data["sources"]:
+                                    st.write(f"- {source['text']}")
+                        else:
+                            st.error("No answer found in response")
+                            logger.error("No answer field in response data")
                     else:
                         st.error(f"Error from backend: {response.text}")
                         logger.error(f"Error from backend: {response.text}")
