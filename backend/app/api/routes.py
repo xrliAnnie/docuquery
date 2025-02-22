@@ -110,8 +110,8 @@ async def query_document(query_data: QueryRequest):
             results = await db.query_documents(query_embedding, query_data.filters)
 
             return {
-                "answer": results.answer,
-                "sources": results.sources
+                "answer": results["answer"],  # Changed from results.answer
+                "sources": results["sources"]  # Changed from results.sources
             }
 
         except Exception as e:
