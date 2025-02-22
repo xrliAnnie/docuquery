@@ -83,13 +83,27 @@ class ChatInterface:
         # When the user clicks the submit button:
         if st.button("Submit"):
             logger.debug("Submit button clicked in ask_question.")
-            if not question:
-                st.error("Please enter a question.")
+            if not question or not question.strip():
+                st.error("Please enter a valid question.")
                 logger.error("No question provided by the user.")
             else:
                 try:
                     logger.debug("Sending POST request to backend query endpoint.")
-                    response = requests.post("http://localhost:8001/api/v1/query", json={"text": question})
+                    # Ensure the payload is properly structured
+                    payload = {
+                        "text": question.strip(),
+                        "filters": {}
+                    }
+                    logger.debug(f"Request payload: {payload}")
+                    
+                    response = requests.post(
+                        "http://localhost:8001/api/v1/query",
+                        json=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        }
+                    )
                     logger.debug(f"Backend response status: {response.status_code}")
                     if response.status_code == 200:
                         data = response.json()

@@ -26,8 +26,8 @@ class APIClient:
             response = requests.post(
                 f"{self.base_url}/query",
                 json={
-                    "doc_id": doc_id,
-                    "question": question
+                    "text": question,  # Changed from 'question' to 'text'
+                    "filters": {"doc_id": doc_id}  # Add filters with doc_id
                 }
             )
             response.raise_for_status()

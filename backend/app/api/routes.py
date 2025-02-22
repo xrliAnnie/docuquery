@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 import logging
 import traceback  # Add this import
@@ -26,7 +26,8 @@ class Query(BaseModel):
     filters: Optional[Dict[str, str]] = None
 
 class QueryRequest(BaseModel):
-    text: str
+    text: str = Field(..., min_length=1)
+    filters: Optional[Dict[str, str]] = Field(default_factory=dict)
 
 router = APIRouter()
 
@@ -81,12 +82,20 @@ async def ingest_document(file: UploadFile = File(...)):
         )
 
 @router.post("/query", response_model=Response)
-async def query_document(query: Query):
+async def query_document(query_data: QueryRequest):
     """
     Endpoint to query the stored documents and get relevant answers.
     """
     try:
-        logger.info(f"Processing query: {query.text}")
+        # Add validation for empty query
+        if not query_data.text or not query_data.text.strip():
+            logger.error("Empty query received")
+            raise HTTPException(
+                status_code=400,
+                detail="Query text cannot be empty"
+            )
+            
+        logger.info(f"Processing query: {query_data.text}")
         
         # Initialize processors
         embedding_processor = EmbeddingProcessor()
@@ -95,10 +104,10 @@ async def query_document(query: Query):
         # Process query
         try:
             # Create embedding for query
-            query_embedding = await embedding_processor.process_query(query.text)
+            query_embedding = await embedding_processor.process_query(query_data.text)
             
             # Search database
-            results = await db.query_documents(query_embedding, query.filters)
+            results = await db.query_documents(query_embedding, query_data.filters)
 
             return {
                 "answer": results.answer,
@@ -112,6 +121,8 @@ async def query_document(query: Query):
                 detail=f"Error processing query: {str(e)}"
             )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -163,23 +174,3 @@ async def get_document_status(doc_id: str):
     except Exception as e:
         logger.error(f"Error getting document status: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error getting document status: {str(e)}")
-
-@router.post("/query")
-async def query(query_data: QueryRequest):
-    logger.info(f"Received query: {query_data.text}")
-    try:
-        # Process query embedding using the embedding processor
-        query_embedding = await embedding_processor.process_query(query_data.text)
-        logger.debug(f"Query embedding: {query_embedding}")
-
-        # Query the database (e.g. using the DBConnector)
-        results = await db_connector.query_documents(query_data.text)
-        logger.debug(f"Query results: {results}")
-
-        # Build a response based on the number of documents found, for example
-        answer = f"Found {len(results)} matching document(s)."
-        logger.info(f"Returning answer: {answer}")
-        return {"answer": answer}
-    except Exception as e:
-        logger.error(f"Error processing query: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
