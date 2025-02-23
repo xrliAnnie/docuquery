@@ -26,7 +26,7 @@ class APIClient:
             url = f"{self.base_url}/query"
             payload = {
                 "text": question,
-                "context_id": document_id  # Pass document_id as context_id
+                "context_id": document_id
             }
             response = requests.post(url, json=payload)
             response.raise_for_status()

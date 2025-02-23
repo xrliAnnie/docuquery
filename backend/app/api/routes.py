@@ -9,7 +9,7 @@ from app.core.embedding_processor import EmbeddingProcessor
 from app.core.db_connector import DBConnector
 from chromadb import Client, Settings
 from langchain.chains import RetrievalQA
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ class Query(BaseModel):
 
 class QueryRequest(BaseModel):
     text: str = Field(..., min_length=1)
+    context_id: str = Field(..., description="Document collection ID")
     filters: Optional[Dict[str, str]] = Field(default_factory=dict)
 
 router = APIRouter()
@@ -89,6 +90,8 @@ async def query_document(query_data: QueryRequest):
     Endpoint to query the stored documents and get relevant answers.
     """
     try:
+        logger.info(f"Received query request: {query_data}")
+
         # Validate query
         if not query_data.text or not query_data.text.strip():
             raise HTTPException(status_code=400, detail="Query text cannot be empty")
@@ -101,7 +104,10 @@ async def query_document(query_data: QueryRequest):
         query_embedding = await embedding_processor.process_query(query_data.text)
         
         # Validate documents
-        documents = await db.query_documents(query_embedding, filters={"collection_name": query_data.context_id})
+        documents = await db.query_documents(
+            query_embedding=query_embedding,
+            collection_id=query_data.context_id
+        )
         if not documents:
             raise HTTPException(status_code=400, detail="No documents found for this context_id")
         if len(documents) < 3:  # Minimum context chunks
@@ -131,8 +137,8 @@ async def query_document(query_data: QueryRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        logger.error(f"Error processing query: {str(e)}")
+        raise
 
 @router.get("/health")
 async def health_check():

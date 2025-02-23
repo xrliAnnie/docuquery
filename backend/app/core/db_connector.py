@@ -60,22 +60,25 @@ class DBConnector:
             logger.error(f"Error storing documents: {str(e)}")
             raise
 
-    async def query_documents(self, query_embedding: list, filters=None):
+    async def query_documents(self, query_embedding: list, collection_id: str):
+        """Query a specific document collection"""
         try:
-            logger.info("Querying documents in ChromaDB")
+            # Get the correct collection
+            collection = self.client.get_collection(collection_id)
             
-            # Use raw embeddings for similarity search
-            docs = self.db.similarity_search_by_vector(
-                embedding=query_embedding,
-                k=3,
-                filter=filters
+            results = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=3,
+                include=["metadatas", "documents"]
             )
             
             return {
-                "answer": docs[0].page_content if docs else "No results found",
-                "sources": [{"page": i, "text": doc.page_content} for i, doc in enumerate(docs)]
+                "answer": results["documents"][0][0] if results["documents"] else "No answer",
+                "sources": [
+                    {"page": meta.get("page", 0), "text": text} 
+                    for meta, text in zip(results["metadatas"][0], results["documents"][0])
+                ]
             }
-            
         except Exception as e:
             logger.error(f"Error querying documents: {str(e)}")
             raise
