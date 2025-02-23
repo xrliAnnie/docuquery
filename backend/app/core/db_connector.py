@@ -9,16 +9,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 class DBConnector:
-    def __init__(self):
+    def __init__(self, collection_name: str = "default"):
         """Initialize the database connector with OpenAI embeddings and a fixed collection name."""
         try:
             # Initialize OpenAI embeddings
             self.embeddings = OpenAIEmbeddings(
-                openai_api_key=os.getenv("OPENAI_API_KEY")
+                openai_api_key=os.getenv("OPENAI_API_KEY"),
+                model="text-embedding-ada-002"
             )
             
             # Initialize chroma client
-            client = chromadb.HttpClient(
+            self.client = chromadb.HttpClient(
                 host="chroma",
                 port=8000,
                 ssl=False,
@@ -33,8 +34,8 @@ class DBConnector:
             # Use the Chroma wrapper from langchain_community.vectorstores.
             # This returns an object that has the "add_texts" method.
             self.db = Chroma(
-                client=client,
-                collection_name="langchain",
+                client=self.client,
+                collection_name=collection_name,
                 embedding_function=self.embeddings
             )
             logger.info("Successfully initialized ChromaDB connection with collection: langchain")
@@ -42,42 +43,34 @@ class DBConnector:
             logger.error(f"Error initializing DB connector: {str(e)}")
             raise
             
-    async def store_documents(self, documents: List[Document]) -> bool:
+    async def store_documents(self, documents: List[Document], collection_id: str):
         """Store documents in Chroma DB"""
         try:
-            self.db.add_texts(
-                texts=[doc.page_content for doc in documents],
-                metadatas=[doc.metadata for doc in documents],
-                ids=[doc.metadata.get("id", f"doc_{i}") for i, doc in enumerate(documents)]
+            # Create a new collection with the provided ID
+            self.db = Chroma(
+                client=self.client,
+                collection_name=collection_id,
+                embedding_function=self.embeddings
             )
-            logger.info(f"Successfully stored {len(documents)} documents")
-            return True
+            
+            # Store documents in the new collection
+            self.db.add(documents)
+            
         except Exception as e:
             logger.error(f"Error storing documents: {str(e)}")
             raise
 
-    async def query_documents(self, query_embedding, filters=None):
+    async def query_documents(self, query_embedding: list, filters=None):
         try:
             logger.info("Querying documents in ChromaDB")
             
-            # Ensure the query_embedding is a string
-            if not isinstance(query_embedding, str):
-                query_embedding = str(query_embedding)
-                
-            # Convert filters to dict if they're not already
-            if filters is None:
-                filters = {}
-                
-            logger.debug(f"Query embedding: {query_embedding}")
-            logger.debug(f"Filters: {filters}")
-            
-            # Perform the similarity search
-            docs = self.db.similarity_search(
-                query=query_embedding,
+            # Use raw embeddings for similarity search
+            docs = self.db.similarity_search_by_vector(
+                embedding=query_embedding,
+                k=3,
                 filter=filters
             )
             
-            # Process and return results
             return {
                 "answer": docs[0].page_content if docs else "No results found",
                 "sources": [{"page": i, "text": doc.page_content} for i, doc in enumerate(docs)]

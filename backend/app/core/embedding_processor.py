@@ -35,7 +35,14 @@ class EmbeddingProcessor:
         else:
             raise ValueError("Unsupported file type. Only PDF and DOCX are supported.")
         
-        return loader.load()
+        documents = loader.load()
+        
+        # Preserve page numbers
+        for doc in documents:
+            if "page" not in doc.metadata:
+                doc.metadata["page"] = 1  # Default to page 1 if not available
+            
+        return documents
 
     def create_documents(self, chunks: List[str], metadata: dict) -> List[Document]:
         """Convert text chunks to Document objects with metadata."""

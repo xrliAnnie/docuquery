@@ -3,8 +3,8 @@ import streamlit as st
 from typing import Dict, Any, Optional
 
 class APIClient:
-    def __init__(self):
-        self.base_url = "http://localhost:8001/api/v1"  # Make sure port matches your backend
+    def __init__(self, base_url="http://localhost:8001/api/v1"):
+        self.base_url = base_url
 
     def upload_document(self, file) -> Dict[str, Any]:
         """Upload and process a document"""
@@ -20,16 +20,15 @@ class APIClient:
             st.error(f"Error uploading document: {str(e)}")
             return {"status": "error", "message": str(e)}
 
-    def query_document(self, doc_id: str, question: str) -> Dict[str, Any]:
+    def query_document(self, document_id: str, question: str) -> Dict[str, Any]:
         """Query a document with a question"""
         try:
-            response = requests.post(
-                f"{self.base_url}/query",
-                json={
-                    "text": question,  # Changed from 'question' to 'text'
-                    "filters": {"doc_id": doc_id}  # Add filters with doc_id
-                }
-            )
+            url = f"{self.base_url}/query"
+            payload = {
+                "text": question,
+                "context_id": document_id  # Pass document_id as context_id
+            }
+            response = requests.post(url, json=payload)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:

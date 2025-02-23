@@ -8,6 +8,8 @@ from app.core.document_loader import DocumentLoader
 from app.core.embedding_processor import EmbeddingProcessor
 from app.core.db_connector import DBConnector
 from chromadb import Client, Settings
+from langchain.chains import RetrievalQA
+from langchain_openai import ChatOpenAI
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -87,48 +89,50 @@ async def query_document(query_data: QueryRequest):
     Endpoint to query the stored documents and get relevant answers.
     """
     try:
-        # Add validation for empty query
+        # Validate query
         if not query_data.text or not query_data.text.strip():
-            logger.error("Empty query received")
-            raise HTTPException(
-                status_code=400,
-                detail="Query text cannot be empty"
-            )
+            raise HTTPException(status_code=400, detail="Query text cannot be empty")
             
-        logger.info(f"Processing query: {query_data.text}")
-        
         # Initialize processors
         embedding_processor = EmbeddingProcessor()
         db = DBConnector()
 
         # Process query
-        try:
-            # Create embedding for query
-            query_embedding = await embedding_processor.process_query(query_data.text)
-            
-            # Search database
-            results = await db.query_documents(query_embedding, query_data.filters)
-
-            return {
-                "answer": results["answer"],  # Changed from results.answer
-                "sources": results["sources"]  # Changed from results.sources
-            }
-
-        except Exception as e:
-            logger.error(f"Error processing query: {str(e)}", exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error processing query: {str(e)}"
-            )
+        query_embedding = await embedding_processor.process_query(query_data.text)
+        
+        # Validate documents
+        documents = await db.query_documents(query_embedding, filters={"collection_name": query_data.context_id})
+        if not documents:
+            raise HTTPException(status_code=400, detail="No documents found for this context_id")
+        if len(documents) < 3:  # Minimum context chunks
+            raise HTTPException(status_code=400, detail="Insufficient context for answering")
+        
+        # Retrieve collection
+        collection = await db.get_collection(query_data.context_id)
+        
+        # Implement RAG pipeline
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=ChatOpenAI(model="gpt-3.5-turbo", temperature=0),
+            chain_type="stuff",
+            retriever=db.db.as_retriever(search_kwargs={"k": 3}),
+            return_source_documents=True
+        )
+        
+        result = qa_chain({"query": query_data.text})
+        
+        return {
+            "answer": result["result"],
+            "sources": [
+                {"doc": doc.metadata["doc_name"], "page": doc.metadata["page"]}
+                for doc in result["source_documents"]
+            ]
+        }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error: {str(e)}"
-        )
+        logger.error(f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 @router.get("/health")
 async def health_check():

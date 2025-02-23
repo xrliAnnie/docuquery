@@ -49,10 +49,14 @@ class ChatInterface:
 
             # Get AI response from backend
             with st.spinner("Thinking..."):
-                logger.debug("Calling APIClient.query_document...")
+                if isinstance(st.session_state.current_document, dict):
+                    document_id = st.session_state.current_document.get("id")
+                else:
+                    document_id = st.session_state.current_document
+                
                 response = self.api_client.query_document(
-                    st.session_state.current_document,
-                    user_input
+                    document_id=document_id,
+                    question=user_input
                 )
                 logger.debug(f"Received response from APIClient: {response}")
 
