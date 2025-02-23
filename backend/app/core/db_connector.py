@@ -43,19 +43,21 @@ class DBConnector:
             logger.error(f"Error initializing DB connector: {str(e)}")
             raise
             
-    async def store_documents(self, documents: List[Document], collection_id: str):
-        """Store documents in Chroma DB"""
+    async def store_documents(self, doc_id: str, documents: List[Document]):
         try:
-            # Create a new collection with the provided ID
-            self.db = Chroma(
+            # Get or create the collection for the given doc_id
+            collection = self.get_or_create_collection(doc_id)
+
+            # Initialize a new Chroma instance for the collection
+            db = Chroma(
                 client=self.client,
-                collection_name=collection_id,
+                collection_name=doc_id,
                 embedding_function=self.embeddings
             )
-            
-            # Store documents in the new collection
-            self.db.add(documents)
-            
+
+            # Add the documents to the collection
+            db.add(documents)
+
         except Exception as e:
             logger.error(f"Error storing documents: {str(e)}")
             raise
@@ -63,19 +65,27 @@ class DBConnector:
     async def query_documents(self, query_embedding: list, collection_id: str):
         """Query a specific document collection"""
         try:
-            # Get the correct collection
-            collection = self.client.get_collection(collection_id)
-            
-            results = collection.query(
+            # Get or create the collection for the given collection_id
+            collection = self.get_or_create_collection(collection_id)
+
+            # Initialize a new Chroma instance for the collection
+            db_for_query = Chroma(
+                client=self.client,
+                collection_name=collection_id,
+                embedding_function=self.embeddings
+            )
+
+            # Query using the underlying collection
+            results = db_for_query._collection.query(
                 query_embeddings=[query_embedding],
                 n_results=3,
                 include=["metadatas", "documents"]
             )
-            
+
             return {
                 "answer": results["documents"][0][0] if results["documents"] else "No answer",
                 "sources": [
-                    {"page": meta.get("page", 0), "text": text} 
+                    {"page": meta.get("page", 0), "text": text}
                     for meta, text in zip(results["metadatas"][0], results["documents"][0])
                 ]
             }
@@ -98,3 +108,13 @@ class DBConnector:
         except Exception as e:
             logger.error(f"Error retrieving collection: {str(e)}")
             raise
+
+    def get_or_create_collection(self, collection_id: str):
+        try:
+            return self.client.get_collection(collection_id)
+        except Exception as e:
+            # Check if the error message indicates that the collection doesn't exist.
+            if "does not exist" in str(e):
+                return self.client.create_collection(collection_id)
+            else:
+                raise
