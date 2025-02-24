@@ -34,12 +34,22 @@ class DBConnector:
             # Assign the collection_name argument to an instance attribute
             self.collection_name = collection_name
 
-            # Use the self.collection_name attribute
-            self.collection = self.client.get_or_create_collection(
-                name=self.collection_name,
-                metadata={"hnsw:space": "cosine"}  # Set the correct dimensionality
-            )
-            logger.info(f"Successfully initialized ChromaDB connection with collection: {self.collection_name}")
+            # Use the self.collection_name attribute only if it's provided
+            if self.collection_name:
+                self.collection = self.client.get_or_create_collection(
+                    name=self.collection_name,
+                    metadata={"space": "cosine"}  # Remove the "dimension" parameter
+                )
+                logger.info(f"Successfully initialized ChromaDB connection with collection: {self.collection_name}")
+            else:
+                logger.info("Successfully initialized ChromaDB connection without a default collection")
+
+            # Optional: Sanity check for embedding dimension
+            sample_embedding = self.embeddings.embed_query("test")
+            if len(sample_embedding) != 1536:
+                raise ValueError(f"Embedding dimension mismatch: expected 1536, got {len(sample_embedding)}")
+            else:
+                logger.info("Embedding dimension verified as 1536.")
         except Exception as e:
             logger.error(f"Error initializing DB connector: {str(e)}")
             raise
@@ -77,7 +87,7 @@ class DBConnector:
             )
 
             # Query using the underlying collection
-            results = db_for_query._collection.query(
+            results = collection.query(
                 query_embeddings=[query_embedding],
                 n_results=3,
                 include=["metadatas", "documents"]
@@ -116,7 +126,7 @@ class DBConnector:
                 # If the collection doesn't exist, create a new one
                 collection = self.client.create_collection(
                     name=collection_id,
-                    metadata={"hnsw:space": "cosine"}
+                    metadata={"space": "cosine"}
                 )
             return collection
         except Exception as e:
@@ -128,7 +138,7 @@ class DBConnector:
             self.client.reset()
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
-                metadata={"hnsw:space": "cosine"}
+                metadata={"space": "cosine"}  # Remove the "dimension" parameter
             )
             logger.info(f"Chroma collection reset successfully for {self.collection_name}")
         except Exception as e:
