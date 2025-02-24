@@ -1,3 +1,4 @@
+import openai
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
@@ -49,13 +50,16 @@ async def ingest_document(file: UploadFile = File(...)):
         # Generate a document id from the file name (or use another unique identifier)
         doc_id = f"doc_{hash(file.filename)}"
         
-        # Store document chunks in the Chroma vector store via DBConnector:
+        # Initialize DBConnector with the document-specific collection name
         db = DBConnector()
-        # We add a "doc_id" field to the metadata of each chunk.
-        metadata = [{"doc_id": doc_id, "chunk_index": i} for i in range(len(result["chunks"]))]
-        
-        db.db.add_texts(
-            texts=result["chunks"],
+        db.reset_collection()  # Reset the collection before ingesting documents
+
+        # Prepare metadata (add a doc_id field so it's also stored with each chunk)
+        metadata = [{"doc_id": doc_id, "page": i} for i in range(len(result["chunks"]))]
+
+        # Store documents using the collection directly
+        db.collection.add(
+            documents=result["chunks"],
             metadatas=metadata,
             ids=[f"{doc_id}_{i}" for i in range(len(result["chunks"]))]
         )

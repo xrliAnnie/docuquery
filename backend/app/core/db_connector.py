@@ -5,12 +5,15 @@ from langchain_openai import OpenAIEmbeddings
 import chromadb
 import os
 import logging
+from chromadb.config import Settings
+from chromadb.api.models.Collection import Collection
+from chromadb import Client
 
 logger = logging.getLogger(__name__)
 
 class DBConnector:
-    def __init__(self, collection_name: str = "default"):
-        """Initialize the database connector with OpenAI embeddings and a fixed collection name."""
+    def __init__(self, collection_name: str = "docuquery"):
+        """Initialize the database connector with a fixed collection name."""
         try:
             # Initialize OpenAI embeddings
             self.embeddings = OpenAIEmbeddings(
@@ -18,12 +21,9 @@ class DBConnector:
                 model="text-embedding-ada-002"
             )
             
-            # Initialize chroma client
-            self.client = chromadb.HttpClient(
-                host="chroma",
-                port=8000,
-                ssl=False,
-                settings=chromadb.Settings(
+            # Initialize Chroma client
+            self.client = Client(
+                settings=Settings(
                     anonymized_telemetry=False,
                     allow_reset=True,
                     is_persistent=True,
@@ -31,14 +31,15 @@ class DBConnector:
                 )
             )
 
-            # Use the Chroma wrapper from langchain_community.vectorstores.
-            # This returns an object that has the "add_texts" method.
-            self.db = Chroma(
-                client=self.client,
-                collection_name=collection_name,
-                embedding_function=self.embeddings
+            # Assign the collection_name argument to an instance attribute
+            self.collection_name = collection_name
+
+            # Use the self.collection_name attribute
+            self.collection = self.client.get_or_create_collection(
+                name=self.collection_name,
+                metadata={"hnsw:space": "cosine"}  # Set the correct dimensionality
             )
-            logger.info("Successfully initialized ChromaDB connection with collection: langchain")
+            logger.info(f"Successfully initialized ChromaDB connection with collection: {self.collection_name}")
         except Exception as e:
             logger.error(f"Error initializing DB connector: {str(e)}")
             raise
@@ -48,7 +49,7 @@ class DBConnector:
             # Get or create the collection for the given doc_id
             collection = self.get_or_create_collection(doc_id)
 
-            # Initialize a new Chroma instance for the collection
+            # Use the self.embeddings instance
             db = Chroma(
                 client=self.client,
                 collection_name=doc_id,
@@ -68,7 +69,7 @@ class DBConnector:
             # Get or create the collection for the given collection_id
             collection = self.get_or_create_collection(collection_id)
 
-            # Initialize a new Chroma instance for the collection
+            # Use the self.embeddings instance
             db_for_query = Chroma(
                 client=self.client,
                 collection_name=collection_id,
@@ -97,10 +98,10 @@ class DBConnector:
         """Get all documents in the collection"""
         try:
             if collection_id is None:
-                collection = self.db._collection
+                collection = self.collection
                 results = collection.get()
             else:
-                collection = self.db._collection
+                collection = self.collection
                 results = collection.get(ids=[collection_id])
             
             logger.info("Successfully retrieved collection")
@@ -118,3 +119,15 @@ class DBConnector:
                 return self.client.create_collection(collection_id)
             else:
                 raise
+
+    def reset_collection(self):
+        try:
+            self.client.reset()
+            self.collection = self.client.get_or_create_collection(
+                name=self.collection_name,
+                metadata={"hnsw:space": "cosine"}
+            )
+            logger.info(f"Chroma collection reset successfully for {self.collection_name}")
+        except Exception as e:
+            logger.error(f"Error resetting Chroma collection: {str(e)}")
+            raise
