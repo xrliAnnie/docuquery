@@ -119,6 +119,8 @@ class DBConnector:
         embedding_function: Optional[EmbeddingFunction[Embeddable]] = None,
         data_loader: Optional[DataLoader[Loadable]] = None,
     ) -> LangChainChroma:
+        if embedding_function is None:
+            embedding_function = self.embeddings
         return LangChainChroma(
             collection_name=name,
             embedding_function=embedding_function,
