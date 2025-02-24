@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
@@ -42,7 +42,7 @@ class EmbeddingProcessor:
             if self.collection_name:
                 self.collection = self.client.get_or_create_collection(
                     name=self.collection_name,
-                    metadata={"hnsw:space": "cosine"}  # Set the correct dimensionality
+                    metadata={"dimension": 1536, "space": "cosine"}
                 )
                 logger.info(f"Successfully initialized ChromaDB connection with collection: {self.collection_name}")
             else:
@@ -117,27 +117,10 @@ class EmbeddingProcessor:
             logger.error(f"Error processing document: {str(e)}")
             raise
 
-    async def process_chunks(self, chunks: List[str], metadata: dict) -> List[Document]:
-        """Process text chunks into embeddings asynchronously."""
-        try:
-            if not chunks:
-                raise ValueError("Chunks list cannot be empty")
-                
-            # Create documents and generate embeddings
-            documents = self.create_documents(chunks, metadata)
-            
-            # Generate embeddings for all documents
-            embeddings = await self.embeddings.aembed_documents([doc.page_content for doc in documents])
-            
-            # Attach embeddings to documents
-            for doc, embedding in zip(documents, embeddings):
-                doc.metadata['embedding'] = embedding
-                doc.metadata['text_chunk'] = doc.page_content
-                
-            return documents
-        except Exception as e:
-            logger.error(f"Error creating embeddings: {str(e)}")
-            raise
+    async def process_chunks(self, chunks: List[str]) -> List[List[float]]:
+        """Generate embeddings for text chunks."""
+        embeddings = self.embeddings.embed_documents(chunks)
+        return embeddings
 
     async def process_query(self, query: str):
         """

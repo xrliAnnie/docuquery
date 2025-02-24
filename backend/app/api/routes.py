@@ -11,6 +11,7 @@ from app.core.db_connector import DBConnector
 from chromadb import Client, Settings
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from app.core.embedding_processor import EmbeddingProcessor
 import uuid
 
 # Set up logging
@@ -58,11 +59,16 @@ async def ingest_document(file: UploadFile = File(...)):
         # Prepare metadata (add a doc_id field so it's also stored with each chunk)
         metadata = [{"doc_id": doc_id, "page": i} for i in range(len(result["chunks"]))]
 
-        # Store documents using the collection directly
+        # Inside the ingest_document endpoint, after processing the file:
+        embedding_processor = EmbeddingProcessor()
+        embeddings = await embedding_processor.process_chunks(result["chunks"])
+
+        # Store documents with embeddings
         db.collection.add(
             documents=result["chunks"],
             metadatas=metadata,
-            ids=[f"{doc_id}_{i}" for i in range(len(result["chunks"]))]
+            ids=[f"{doc_id}_{i}" for i in range(len(result["chunks"]))],
+            embeddings=embeddings  # Include embeddings
         )
         
         return {

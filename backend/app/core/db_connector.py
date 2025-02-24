@@ -50,6 +50,13 @@ class DBConnector:
                 raise ValueError(f"Embedding dimension mismatch: expected 1536, got {len(sample_embedding)}")
             else:
                 logger.info("Embedding dimension verified as 1536.")
+
+            # Update the docuquery collection metadata
+            self.docuquery_collection = self.client.get_or_create_collection(
+                name="docuquery",
+                metadata={"dimension": 1536, "space": "cosine"}
+            )
+            logger.info(f"Successfully initialized ChromaDB connection with collection: docuquery")
         except Exception as e:
             logger.error(f"Error initializing DB connector: {str(e)}")
             raise
@@ -120,18 +127,13 @@ class DBConnector:
 
     def get_or_create_collection(self, collection_id: str):
         try:
-            # First, try to get the existing collection
-            collection = self.client.get_collection(collection_id)
-            if collection is None:
-                # If the collection doesn't exist, create a new one with the correct dimension
-                collection = self.client.create_collection(
-                    name=collection_id,
-                    metadata={"dimension": 1536, "space": "cosine"}
-                )
-            return collection
-        except Exception as e:
-            logger.error(f"Error getting or creating collection: {str(e)}")
-            raise
+            return self.client.get_collection(collection_id)
+        except Exception:
+            # Create collection with explicit dimension
+            return self.client.create_collection(
+                name=collection_id,
+                metadata={"dimension": 1536, "space": "cosine"}
+            )
 
     def reset_collection(self):
         try:
