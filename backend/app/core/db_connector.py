@@ -8,6 +8,8 @@ import logging
 from chromadb.config import Settings
 from chromadb.api.models.Collection import Collection
 from chromadb import Client
+from langchain.vectorstores import Chroma as LangChainChroma
+from chromadb.api.types import EmbeddingFunction, Embeddable, DataLoader, Loadable
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +38,9 @@ class DBConnector:
 
             # Use the self.collection_name attribute only if it's provided
             if self.collection_name:
-                self.collection = self.client.get_or_create_collection(
+                self.collection = self.get_collection(
                     name=self.collection_name,
-                    metadata={"dimension": 1536, "space": "cosine"}
+                    embedding_function=self.embeddings
                 )
                 logger.info(f"Successfully initialized ChromaDB connection with collection: {self.collection_name}")
             else:
@@ -111,19 +113,17 @@ class DBConnector:
             logger.error(f"Error querying documents: {str(e)}")
             raise
 
-    async def get_collection(self, collection_id: str = None):
-        """Get all documents in the collection"""
-        try:
-            if collection_id is None:
-                collection = self.collection
-            else:
-                collection = self.client.get_collection(collection_id)
-            
-            logger.info("Successfully retrieved collection")
-            return collection
-        except Exception as e:
-            logger.error(f"Error retrieving collection: {str(e)}")
-            raise
+    def get_collection(
+        self,
+        name: str,
+        embedding_function: Optional[EmbeddingFunction[Embeddable]] = None,
+        data_loader: Optional[DataLoader[Loadable]] = None,
+    ) -> LangChainChroma:
+        return LangChainChroma(
+            collection_name=name,
+            embedding_function=embedding_function,
+            persist_directory=None,  # or your persist directory if needed
+        )
 
     def get_or_create_collection(self, collection_id: str):
         try:

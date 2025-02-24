@@ -105,6 +105,7 @@ async def query_document(query_data: QueryRequest):
 
         # Validate query
         if not query_data.text or not query_data.text.strip():
+            logger.error("Query text cannot be empty")
             raise HTTPException(status_code=400, detail="Query text cannot be empty")
             
         # Initialize processors
@@ -120,18 +121,20 @@ async def query_document(query_data: QueryRequest):
             collection_id=query_data.context_id
         )
         if not documents:
+            logger.error(f"No documents found for this context_id: {query_data.context_id}")
             raise HTTPException(status_code=400, detail="No documents found for this context_id")
-        if len(documents) < 3:  # Minimum context chunks
+        if len(documents) < 2:  # Minimum context chunks
+            logger.error(f"Insufficient context for answering with {len(documents)} documents")
             raise HTTPException(status_code=400, detail="Insufficient context for answering")
         
         # Retrieve collection
-        collection = await db.get_collection(query_data.context_id)
+        collection = db.get_collection(query_data.context_id)
         
         # Implement RAG pipeline
         qa_chain = RetrievalQA.from_chain_type(
             llm=ChatOpenAI(model="gpt-3.5-turbo", temperature=0),
             chain_type="stuff",
-            retriever=db.db.as_retriever(search_kwargs={"k": 3}),
+            retriever=collection.as_retriever(search_kwargs={"k": 3}),
             return_source_documents=True
         )
         
@@ -145,7 +148,8 @@ async def query_document(query_data: QueryRequest):
             ]
         }
 
-    except HTTPException:
+    except HTTPException as e:
+        logger.error(f"HTTP Exception: {str(e)}")
         raise
     except Exception as e:
         logger.error(f"Error processing query: {str(e)}")
@@ -167,7 +171,7 @@ async def get_document_status(doc_id: str):
     try:
         # Initialize DBConnector with the document-specific collection name
         db = DBConnector(collection_name=doc_id)
-        collection = await db.get_collection(doc_id)  # Get the collection for the given doc_id
+        collection = db.get_collection(doc_id)  # Remove 'await'
         logger.info(f"Fetching document with doc_id: {doc_id} using {collection}")
         return {"status": "success"}
     except Exception as e:
