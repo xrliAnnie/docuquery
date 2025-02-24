@@ -1,0 +1,22 @@
+# Core dependencies
+fastapi==0.99.1
+uvicorn==0.18.3
+python-multipart==0.0.5
+
+# LangChain ecosystem
+langchain==0.1.9
+langchain-community==0.0.24
+langchain-openai==0.0.8  # Updated OpenAI package
+chromadb==0.6.3
+
+# Document processing
+PyPDF2==3.0.1
+python-docx==0.8.11
+
+# OpenAI
+openai>=1.10.0
+
+# Potential transitive dependencies for chromadb
+dill>=0.3.6
+hnswlib>=0.7.0
+sentence-transformers>=2.2.2

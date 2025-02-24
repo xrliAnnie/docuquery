@@ -1,0 +1,49 @@
+services:
+  backend:
+    build:
+      context: ../backend  # Point to the backend directory
+      dockerfile: ../infra/backend/Dockerfile  # Point to the Dockerfile location
+    ports:
+      - "8001:8000"  # Map container port 8000 to host port 8001
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ../backend:/app  # Mount the backend code
+    depends_on:
+      - chroma
+
+  # frontend:
+  #   build: 
+  #     context: ../frontend
+  #     dockerfile: ../infra/frontend/Dockerfile
+  #   ports:
+  #     - "8501:8501"
+  #   environment:
+  #     - API_URL=http://backend:8000
+  #   volumes:
+  #     - ../frontend:/app
+  #   depends_on:
+  #     - backend
+
+  chroma:
+    build:
+      context: .
+      dockerfile: chroma/Dockerfile
+    volumes:
+      - chroma_data:/chroma/chroma_data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma_data
+      - ALLOW_RESET=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  chroma_data:
+    driver: local
