@@ -99,13 +99,11 @@ class DBConnector:
         try:
             if collection_id is None:
                 collection = self.collection
-                results = collection.get()
             else:
-                collection = self.collection
-                results = collection.get(ids=[collection_id])
+                collection = self.client.get_collection(collection_id)
             
             logger.info("Successfully retrieved collection")
-            return results
+            return collection
         except Exception as e:
             logger.error(f"Error retrieving collection: {str(e)}")
             raise

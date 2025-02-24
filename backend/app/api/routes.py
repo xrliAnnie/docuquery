@@ -11,6 +11,7 @@ from app.core.db_connector import DBConnector
 from chromadb import Client, Settings
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+import uuid
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -47,11 +48,11 @@ async def ingest_document(file: UploadFile = File(...)):
         doc_loader = DocumentLoader()
         result = await doc_loader.process_file(file)
         
-        # Generate a document id from the file name (or use another unique identifier)
-        doc_id = f"doc_{hash(file.filename)}"
+        # Generate a unique document id using a UUID
+        doc_id = f"doc_{uuid.uuid4().hex}"
         
         # Initialize DBConnector with the document-specific collection name
-        db = DBConnector()
+        db = DBConnector(collection_name=doc_id)
         db.reset_collection()  # Reset the collection before ingesting documents
 
         # Prepare metadata (add a doc_id field so it's also stored with each chunk)
@@ -158,33 +159,11 @@ async def get_document_status(doc_id: str):
     Get document status and metadata from Chroma using the DBConnector.
     """
     try:
-        logger.info(f"Fetching document with doc_id: {doc_id} using DBConnector.")
-
-        # Use the DBConnector to ensure you're hitting the same persistent collection.
-        db = DBConnector()
-
-        # For debugging, get the underlying collection to log its full content.
-        collection = db.db._collection  # Access the raw collection for logging purposes.
-        all_items = collection.get()
-        logger.debug(f"Complete collection data: {all_items}")
-
-        # Query the collection using the metadata 'doc_id'
-        results = collection.get(where={"doc_id": doc_id})
-        logger.debug(f"Query results for doc_id {doc_id}: {results}")
-
-        if not results.get("ids"):
-            logger.error(
-                f"Document {doc_id} not found. Metadata in collection: {all_items.get('metadatas')}"
-            )
-            return {"status": "error", "message": f"Document {doc_id} not found"}
-
-        logger.info(f"Document {doc_id} found with {len(results['ids'])} chunks.")
-        return {
-            "status": "success",
-            "chunk_count": len(results["ids"]),
-            "metadata": results.get("metadatas"),
-            "sample_chunks": results["documents"][:3] if results.get("documents") else []
-        }
+        # Initialize DBConnector with the document-specific collection name
+        db = DBConnector(collection_name=doc_id)
+        collection = await db.get_collection(doc_id)  # Get the collection for the given doc_id
+        logger.info(f"Fetching document with doc_id: {doc_id} using {collection}")
+        return {"status": "success"}
     except Exception as e:
-        logger.error(f"Error getting document status: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error getting document status: {str(e)}")
+        logger.error(f"Error getting document status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
