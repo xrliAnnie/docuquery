@@ -120,12 +120,11 @@ class DocumentLoader:
             text = ""
             for page_num, page in enumerate(pdf.pages, 1):
                 page_text = page.extract_text()
-                if page_text.strip():
-                    text += f"\n\nPage {page_num}:\n{page_text}"
-
-            chunks = self.text_splitter.split_text(text)
-            logger.info(f"Successfully extracted {len(chunks)} chunks from PDF")
-            return chunks
+                # Add cleaning
+                page_text = page_text.replace('\n', ' ').strip()
+                if page_text:
+                    text += f"Page {page_num}: {page_text}\n\n"
+            return self.text_splitter.split_text(text)
         except Exception as e:
             logger.error(f"Error processing PDF: {str(e)}")
             raise

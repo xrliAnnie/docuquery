@@ -38,10 +38,8 @@ class DBConnector:
 
             # Use the self.collection_name attribute only if it's provided
             if self.collection_name:
-                self.collection = self.get_collection(
-                    name=self.collection_name,
-                    embedding_function=self.embeddings
-                )
+                # Use get_or_create_collection instead of get_collection
+                self.collection = self.get_or_create_collection(collection_id=self.collection_name)
                 logger.info(f"Successfully initialized ChromaDB connection with collection: {self.collection_name}")
             else:
                 logger.info("Successfully initialized ChromaDB connection without a default collection")
@@ -113,21 +111,10 @@ class DBConnector:
             logger.error(f"Error querying documents: {str(e)}")
             raise
 
-    def get_collection(
-        self,
-        name: str,
-        embedding_function: Optional[EmbeddingFunction[Embeddable]] = None,
-        data_loader: Optional[DataLoader[Loadable]] = None,
-    ) -> LangChainChroma:
-        if embedding_function is None:
-            embedding_function = self.embeddings
-        return LangChainChroma(
-            collection_name=name,
-            embedding_function=embedding_function,
-            persist_directory=None,  # or your persist directory if needed
-        )
+    def get_collection(self, name: str) -> Collection:
+        return self.client.get_collection(name)
 
-    def get_or_create_collection(self, collection_id: str):
+    def get_or_create_collection(self, collection_id: str) -> Collection:
         try:
             return self.client.get_collection(collection_id)
         except Exception:

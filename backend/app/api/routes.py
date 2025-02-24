@@ -13,6 +13,7 @@ from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from app.core.embedding_processor import EmbeddingProcessor
 import uuid
+from langchain.vectorstores import Chroma
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -127,33 +128,38 @@ async def query_document(query_data: QueryRequest):
             logger.error(f"Insufficient context for answering with {len(documents)} documents")
             raise HTTPException(status_code=400, detail="Insufficient context for answering")
         
-        # Retrieve collection
-        collection = db.get_collection(query_data.context_id)
-        
-        # Implement RAG pipeline
+        # Create vector store connection
+        vector_store = Chroma(
+            client=db.client,
+            collection_name=query_data.context_id,
+            embedding_function=db.embeddings
+        )
+
+        # Create RAG chain
         qa_chain = RetrievalQA.from_chain_type(
             llm=ChatOpenAI(model="gpt-3.5-turbo", temperature=0),
             chain_type="stuff",
-            retriever=collection.as_retriever(search_kwargs={"k": 3}),
+            retriever=vector_store.as_retriever(search_kwargs={"k": 3}),
             return_source_documents=True
         )
         
-        result = qa_chain({"query": query_data.text})
+        result = qa_chain.invoke({"query": query_data.text})
         
         return {
             "answer": result["result"],
             "sources": [
-                {"doc": doc.metadata["doc_name"], "page": doc.metadata["page"]}
+                {
+                    "doc": doc.metadata.get("doc_id", ""),
+                    "page": doc.metadata.get("page", 0),
+                    "text": doc.page_content  # Add the text field from the source document
+                }
                 for doc in result["source_documents"]
             ]
         }
 
-    except HTTPException as e:
-        logger.error(f"HTTP Exception: {str(e)}")
-        raise
     except Exception as e:
-        logger.error(f"Error processing query: {str(e)}")
-        raise
+        logger.error(f"Query error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health")
 async def health_check():
