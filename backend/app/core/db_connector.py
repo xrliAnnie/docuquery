@@ -38,7 +38,7 @@ class DBConnector:
             if self.collection_name:
                 self.collection = self.client.get_or_create_collection(
                     name=self.collection_name,
-                    metadata={"space": "cosine"}  # Remove the "dimension" parameter
+                    metadata={"dimension": 1536, "space": "cosine"}
                 )
                 logger.info(f"Successfully initialized ChromaDB connection with collection: {self.collection_name}")
             else:
@@ -123,10 +123,10 @@ class DBConnector:
             # First, try to get the existing collection
             collection = self.client.get_collection(collection_id)
             if collection is None:
-                # If the collection doesn't exist, create a new one
+                # If the collection doesn't exist, create a new one with the correct dimension
                 collection = self.client.create_collection(
                     name=collection_id,
-                    metadata={"space": "cosine"}
+                    metadata={"dimension": 1536, "space": "cosine"}
                 )
             return collection
         except Exception as e:
@@ -138,7 +138,7 @@ class DBConnector:
             self.client.reset()
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
-                metadata={"space": "cosine"}  # Remove the "dimension" parameter
+                metadata={"dimension": 1536, "space": "cosine"}
             )
             logger.info(f"Chroma collection reset successfully for {self.collection_name}")
         except Exception as e:
