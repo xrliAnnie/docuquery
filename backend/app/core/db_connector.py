@@ -110,13 +110,12 @@ class DBConnector:
 
     def get_or_create_collection(self, collection_id: str):
         try:
-            return self.client.get_collection(collection_id)
+            collection = self.client.get_collection(collection_id, create=True)
+            collection.metadata = {"hnsw:space": "cosine"}  # Set the correct dimensionality
+            return collection
         except Exception as e:
-            # Check if the error message indicates that the collection doesn't exist.
-            if "does not exist" in str(e):
-                return self.client.create_collection(collection_id)
-            else:
-                raise
+            logger.error(f"Error getting or creating collection: {str(e)}")
+            raise
 
     def reset_collection(self):
         try:

@@ -3,6 +3,9 @@ from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader
 from langchain_community.embeddings import OpenAIEmbeddings
+from chromadb import Client
+from chromadb.config import Settings
+from langchain_openai import OpenAIEmbeddings
 import os
 import logging
 import asyncio
@@ -13,18 +16,40 @@ logger = logging.getLogger(__name__)
 class EmbeddingProcessor:
     """Processes documents into embeddings using OpenAI's embedding model."""
     
-    def __init__(self):
-        """Initialize the embedding processor with OpenAI credentials and text splitter."""
-        self.embeddings = OpenAIEmbeddings(
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            model="text-embedding-ada-002"
-        )
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50,
-            length_function=len,
-            is_separator_regex=False,
-        )
+    def __init__(self, collection_name: str = None):
+        """Initialize the database connector with a collection name."""
+        try:
+            # Initialize OpenAI embeddings
+            self.embeddings = OpenAIEmbeddings(
+                openai_api_key=os.getenv("OPENAI_API_KEY"),
+                model="text-embedding-ada-002"
+            )
+            
+            # Initialize Chroma client
+            self.client = Client(
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True,
+                    is_persistent=True,
+                    chroma_server_api_default_path="/api/v1"
+                )
+            )
+
+            # Assign the collection_name argument to an instance attribute
+            self.collection_name = collection_name
+
+            # Use the self.collection_name attribute only if it's provided
+            if self.collection_name:
+                self.collection = self.client.get_or_create_collection(
+                    name=self.collection_name,
+                    metadata={"hnsw:space": "cosine"}  # Set the correct dimensionality
+                )
+                logger.info(f"Successfully initialized ChromaDB connection with collection: {self.collection_name}")
+            else:
+                logger.info("Successfully initialized ChromaDB connection without a default collection")
+        except Exception as e:
+            logger.error(f"Error initializing DB connector: {str(e)}")
+            raise
 
     def load_document(self, file_path: str) -> List[Document]:
         """Load document from file path using appropriate loader."""
@@ -114,17 +139,11 @@ class EmbeddingProcessor:
             logger.error(f"Error creating embeddings: {str(e)}")
             raise
 
-    async def process_query(self, text: str) -> list:
+    async def process_query(self, query: str):
         """
         Asynchronously process a query string into an embedding.
         """
-        loop = asyncio.get_running_loop()
-        # Use run_in_executor to run the synchronous embed_query call without blocking the event loop
-        query_embedding = await loop.run_in_executor(
-            None,
-            functools.partial(self.embeddings.embed_query, text)
-        )
-        return query_embedding
+        return self.embeddings.embed_query(query)
 
 # Create an instance of EmbeddingProcessor
 embedding_processor = EmbeddingProcessor()
