@@ -86,12 +86,11 @@ A powerful RAG (Retrieval-Augmented Generation) system that allows users to uplo
    ```bash
    # From the root directory
    cd frontend
-   pnpm install
-   pnpm dev
+   streamlit run app/main.py
    ```
 
    The services will be available at:
-   - Frontend (Dev): http://localhost:5173
+   - Frontend (Dev): http://localhost:8501
    - Backend (Dev): http://localhost:8000
 
 ### Viewing Logs
@@ -108,7 +107,7 @@ docker-compose logs -f backend
 
 For development mode:
 - Backend logs will appear in the terminal running uvicorn
-- Frontend logs will appear in the terminal running pnpm dev
+- Frontend logs will appear in the terminal running streamlit run app/main.py
 
 ### API Endpoints
 
